@@ -10,8 +10,9 @@ $wt = Join-Path (Split-Path $PSScriptRoot -Parent) 'mrsolis-site-deploy'
 try {
     # Fresh gh-pages worktree (create the branch if this clone lacks it)
     git worktree prune
+    $hasGhPages = [bool]((git branch --list gh-pages) -join '').Trim()
     if (-not (Test-Path $wt)) {
-        if (git show-ref --verify --quiet refs/heads/gh-pages) { git worktree add $wt gh-pages | Out-Null }
+        if ($hasGhPages) { git worktree add $wt gh-pages | Out-Null }
         else { git worktree add -b gh-pages $wt | Out-Null }
     }
 
@@ -29,7 +30,8 @@ try {
     Remove-Item .\qgen\*.sqlite3 -Force -ErrorAction SilentlyContinue
 
     git add -A
-    if (git diff --cached --quiet) {
+    git diff --cached --quiet   # exit 1 = there are staged changes
+    if ($LASTEXITCODE -eq 0) {
         Write-Output "Site already up to date - nothing to deploy."
     } else {
         $sha = git rev-parse --short HEAD
@@ -40,6 +42,8 @@ try {
 }
 finally {
     Set-Location $PSScriptRoot
-    git worktree remove $wt --force 2>$null
+    if ((Test-Path $wt) -and ((git worktree list | Out-String) -match 'mrsolis-site-deploy')) {
+        git worktree remove $wt --force
+    }
     git worktree prune
 }
