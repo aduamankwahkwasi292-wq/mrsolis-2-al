@@ -5,6 +5,7 @@ Set-Location $PSScriptRoot
 
 if ((git rev-parse --abbrev-ref HEAD) -ne 'main') { throw "Switch to main before deploying." }
 if (git status --porcelain) { Write-Warning "Uncommitted changes detected - deploying the last COMMITTED state of main." }
+$mainSha = git rev-parse --short HEAD
 
 $wt = Join-Path (Split-Path $PSScriptRoot -Parent) 'mrsolis-site-deploy'
 try {
@@ -34,8 +35,7 @@ try {
     if ($LASTEXITCODE -eq 0) {
         Write-Output "Site already up to date - nothing to deploy."
     } else {
-        $sha = git rev-parse --short HEAD
-        git commit -m "Deploy site from main@$sha"
+        git commit -m "Deploy site from main@$mainSha"
         git push origin gh-pages
         Write-Output "Deployed. Live in ~1 min at https://aduamankwahkwasi292-wq.github.io/mrsolis-2-al/"
     }
@@ -47,3 +47,5 @@ finally {
     }
     git worktree prune
 }
+
+
