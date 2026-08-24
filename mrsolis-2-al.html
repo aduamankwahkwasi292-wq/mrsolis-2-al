@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MrSOLIS 2-AL · Deterministic Math Engine</title>
+<style>
+  :root{
+    --bg:#05070d; --bg-grad-a:#070b16; --bg-grad-b:#050710;
+    --panel:#0b0f1c; --panel-2:#0e1424; --panel-3:#101832;
+    --border:rgba(126,170,255,0.14); --border-strong:rgba(126,180,255,0.35);
+    --accent:#57c7ff; --accent-2:#8b7bff; --accent-soft:rgba(87,199,255,0.12);
+    --text:#e8edf8; --text-dim:#8d97ae; --text-faint:#5a6379;
+    --green:#42e0a0; --red:#ff6b6f; --amber:#ffb454;
+    --radius:10px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; font-family:var(--sans); color:var(--text);
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(90,140,255,0.10), transparent 60%),
+      radial-gradient(ellipse 700px 600px at 110% 10%, rgba(140,110,255,0.08), transparent 55%),
+      linear-gradient(180deg, var(--bg-grad-a), var(--bg-grad-b));
+    min-height:100vh; display:flex; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:rgba(87,199,255,0.25); }
+  a{ color:var(--accent); }
+  button{ font-family:inherit; }
+
+  .app{ display:flex; width:100%; min-height:100vh; }
+  .sidebar{
+    width:230px; flex-shrink:0; background:rgba(8,11,20,0.6);
+    border-right:1px solid var(--border); display:flex; flex-direction:column;
+    padding:22px 16px; backdrop-filter: blur(6px);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; padding:0 4px 10px 4px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:9px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:16px; color:#04060c;
+    box-shadow:0 0 18px rgba(87,199,255,0.35); flex-shrink:0;
+  }
+  .brand-text{ line-height:1.15; }
+  .brand-name{ font-size:14.5px; font-weight:700; letter-spacing:0.2px; display:flex; align-items:center; gap:6px; }
+  .brand-badge{
+    font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:0.5px;
+    background:var(--accent-soft); color:var(--accent);
+    border:1px solid rgba(87,199,255,0.35); padding:1.5px 5px; border-radius:4px;
+  }
+  .brand-tagline{ font-size:10.5px; color:var(--text-faint); margin-top:2px; }
+
+  .function-card{
+    border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--panel-2); padding:12px; font-size:11.5px; color:var(--text-dim);
+    line-height:1.55; margin-bottom:16px;
+  }
+  .function-card b{ color:var(--text); }
+
+  .nav{ display:flex; flex-direction:column; gap:2px; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px;
+    font-size:13px; color:var(--text-dim); border-left:2px solid transparent; user-select:none;
+  }
+  .nav-item svg{ width:16px; height:16px; opacity:0.8; }
+  .nav-item.active{ color:var(--text); background:rgba(87,199,255,0.08); border-left:2px solid var(--accent); }
+
+  .sidebar-spacer{ flex:1; }
+  .engine-card{ border:1px solid var(--border); border-radius:var(--radius); background:var(--panel-2); padding:12px; }
+  .engine-row{ display:flex; align-items:center; gap:9px; }
+  .engine-avatar{ width:30px; height:30px; border-radius:8px; background:var(--panel-3); display:flex; align-items:center; justify-content:center; border:1px solid var(--border); }
+  .engine-avatar svg{ width:16px; height:16px; color:var(--accent); }
+  .engine-meta{ line-height:1.3; }
+  .engine-name{ font-size:12.5px; font-weight:600; }
+  .engine-status{ font-size:10.5px; display:flex; align-items:center; gap:5px; color:var(--text-faint); }
+  .status-dot{ width:6px; height:6px; border-radius:50%; background:var(--text-faint); flex-shrink:0; }
+  .status-dot.on{ background:var(--green); box-shadow:0 0 8px var(--green); }
+  .status-dot.off{ background:var(--red); box-shadow:0 0 8px var(--red); }
+  .engine-note{ margin-top:9px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono); line-height:1.5; }
+
+  .main{ flex:1; min-width:0; padding:26px 32px 40px; max-width:900px; margin:0 auto; width:100%; }
+  .topbar{ margin-bottom:20px; }
+  .topbar h1{ font-size:19px; margin:0; font-weight:700; letter-spacing:0.2px; }
+  .topbar p{ margin:5px 0 0; font-size:12.5px; color:var(--text-faint); line-height:1.5; max-width:560px; }
+
+  .cfg-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:12.5px; }
+  .cfg-row label{ color:var(--text-dim); width:170px; flex-shrink:0; }
+  .cfg-row input[type=text], .cfg-row input[type=number]{ background:var(--panel-3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 9px; font-family:var(--mono); font-size:11.5px; flex:1; max-width:160px; }
+  .toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .cfg-toggle{ font-family:var(--mono); font-size:11px; color:var(--text-dim); background:var(--panel-2); border:1px solid var(--border); border-radius:7px; padding:6px 10px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .cfg-toggle:hover{ border-color:var(--border-strong); color:var(--text); }
+  .cfg-toggle svg{ width:13px; height:13px; }
+  .cfg-panel{ display:none; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel-2); padding:14px 16px; margin-bottom:18px; }
+  .cfg-panel.open{ display:block; }
+
+  .hud{
+    position:relative; border:1px solid var(--border); border-radius:14px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.015), transparent 40%), var(--panel);
+    padding:28px; min-height:320px;
+  }
+  .hud .corner{ position:absolute; width:20px; height:20px; border:2px solid var(--accent); opacity:0.65; }
+  .hud .c-tl{ top:-1px; left:-1px; border-right:none; border-bottom:none; border-radius:8px 0 0 0; }
+  .hud .c-tr{ top:-1px; right:-1px; border-left:none; border-bottom:none; border-radius:0 8px 0 0; }
+  .hud .c-bl{ bottom:-1px; left:-1px; border-right:none; border-top:none; border-radius:0 0 0 8px; }
+  .hud .c-br{ bottom:-1px; right:-1px; border-left:none; border-top:none; border-radius:0 0 8px 0; }
+
+  .qinput{
+    width:100%; min-height:110px; resize:vertical;
+    background:var(--panel-3); border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-size:14.5px; font-family:var(--sans); padding:14px 16px; line-height:1.5;
+  }
+  .qinput:focus{ outline:none; border-color:var(--accent); }
+  .qinput::placeholder{ color:var(--text-faint); }
+
+  .examples{ display:flex; gap:7px; flex-wrap:wrap; margin:12px 0 20px; }
+  .example-chip{ font-size:11px; color:var(--text-dim); border:1px solid var(--border); border-radius:20px; padding:5px 12px; cursor:pointer; background:none; }
+  .example-chip:hover{ border-color:var(--accent); color:var(--accent); }
+
+  .slider-block{ margin-bottom:18px; }
+  .slider-label{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .slider-label span:first-child{ font-size:12.5px; color:var(--text-dim); }
+  .slider-value{ font-family:var(--mono); font-size:22px; font-weight:700; color:var(--accent); }
+  .slider-value small{ font-size:11px; color:var(--text-faint); font-weight:500; margin-left:3px; }
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:5px; border-radius:3px;
+    background:linear-gradient(90deg, var(--accent), var(--accent-2)) 0/var(--fill,50%) 100% no-repeat, var(--panel-3);
+    cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid var(--accent); box-shadow:0 0 12px rgba(87,199,255,0.6); cursor:pointer; margin-top:-1px; }
+  input[type=range]::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid var(--accent); box-shadow:0 0 12px rgba(87,199,255,0.6); cursor:pointer; }
+  .slider-ticks{ display:flex; justify-content:space-between; margin-top:6px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono); }
+
+  .timer-row{ display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+  .timer-row label{ font-size:12.5px; color:var(--text-dim); flex:1; }
+  .timer-input-wrap{ display:flex; align-items:center; gap:6px; }
+  .timer-input-wrap input{ width:64px; background:var(--panel-3); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 9px; font-family:var(--mono); font-size:13px; text-align:center; }
+  .timer-input-wrap span{ font-size:11px; color:var(--text-faint); }
+
+  .generate-btn{
+    width:100%; padding:13px; border:none; border-radius:10px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    color:#04060c; font-weight:700; font-size:14px; letter-spacing:0.2px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 0 22px rgba(87,199,255,0.25);
+  }
+  .generate-btn:hover{ filter:brightness(1.08); }
+  .generate-btn:disabled{ opacity:0.5; cursor:not-allowed; filter:none; }
+  .generate-btn svg{ width:16px; height:16px; }
+
+  .loading-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:280px; }
+  .spinner{ width:44px; height:44px; border-radius:50%; border:3px solid rgba(87,199,255,0.15); border-top-color:var(--accent); animation:spin 0.9s linear infinite; margin-bottom:18px; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .loading-stage{ font-family:var(--mono); font-size:12.5px; color:var(--accent); min-height:18px; }
+  .loading-sub{ font-size:11px; color:var(--text-faint); margin-top:6px; }
+
+  .quiz-topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:10px; flex-wrap:wrap; }
+  .quiz-progress{ font-family:var(--mono); font-size:12px; color:var(--text-dim); }
+  .quiz-progress b{ color:var(--text); }
+  .quiz-meta{ display:flex; align-items:center; gap:10px; }
+  .score-pill{ font-family:var(--mono); font-size:11.5px; color:var(--green); border:1px solid rgba(66,224,160,0.35); border-radius:20px; padding:4px 11px; background:rgba(66,224,160,0.06); }
+  .timer-pill{ font-family:var(--mono); font-size:11.5px; color:var(--accent); border:1px solid rgba(87,199,255,0.35); border-radius:20px; padding:4px 11px; background:rgba(87,199,255,0.06); }
+  .timer-pill.low{ color:var(--red); border-color:rgba(255,107,111,0.4); background:rgba(255,107,111,0.08); }
+  .exit-btn{ background:none; border:1px solid var(--border); color:var(--text-faint); border-radius:7px; padding:6px 11px; font-size:11.5px; cursor:pointer; display:flex; align-items:center; gap:5px; }
+  .exit-btn:hover{ border-color:var(--red); color:var(--red); }
+  .exit-btn svg{ width:12px; height:12px; }
+
+  .progress-bar{ height:3px; background:var(--panel-3); border-radius:2px; margin-bottom:24px; overflow:hidden; }
+  .progress-bar-fill{ height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-2)); transition:width .2s; }
+
+  .badge{ font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:0.4px; padding:2.5px 7px; border-radius:5px; border:1px solid var(--border); color:var(--text-faint); }
+  .badge.diff-easy{ color:var(--green); border-color:rgba(66,224,160,0.35); }
+  .badge.diff-medium{ color:var(--amber); border-color:rgba(255,180,84,0.35); }
+  .badge.diff-hard{ color:var(--red); border-color:rgba(255,107,111,0.35); }
+  .badge.type{ color:var(--accent-2); border-color:rgba(139,123,255,0.35); }
+  .qcard-top{ display:flex; gap:8px; margin-bottom:14px; }
+
+  .qtext-big{ font-size:17px; font-weight:600; line-height:1.5; margin-bottom:20px; font-family:var(--mono); min-height:60px; }
+
+  .options{ display:flex; flex-direction:column; gap:9px; }
+  .opt{ display:flex; align-items:center; gap:12px; padding:13px 14px; border:1px solid var(--border); border-radius:9px; background:var(--panel-3); cursor:pointer; font-size:14px; text-align:left; font-family:var(--mono); }
+  .opt:hover{ border-color:var(--border-strong); }
+  .opt-letter{ width:22px; height:22px; border-radius:5px; background:rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:11px; flex-shrink:0; color:var(--text-dim); }
+  .opt.correct{ border-color:rgba(66,224,160,0.55); background:rgba(66,224,160,0.08); }
+  .opt.correct .opt-letter{ background:var(--green); color:#04140c; }
+  .opt.incorrect{ border-color:rgba(255,107,111,0.5); background:rgba(255,107,111,0.07); }
+  .opt.incorrect .opt-letter{ background:var(--red); color:#1a0505; }
+  .opt.disabled{ cursor:default; }
+
+  .sa-reveal{ background:none; border:1px dashed var(--border-strong); color:var(--accent); border-radius:9px; padding:13px; font-size:13.5px; cursor:pointer; width:100%; text-align:center; font-family:var(--mono); }
+  .sa-answer-block{ padding:14px 16px; border-radius:9px; background:var(--panel-3); border:1px solid var(--border); }
+  .sa-answer-block .ans{ font-family:var(--mono); font-size:15px; color:var(--green); margin-bottom:12px; }
+  .self-report{ display:flex; gap:10px; }
+  .self-report button{ flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel-2); color:var(--text-dim); font-size:12.5px; cursor:pointer; }
+  .self-report button.pick-correct:hover{ border-color:var(--green); color:var(--green); }
+  .self-report button.pick-wrong:hover{ border-color:var(--red); color:var(--red); }
+
+  .next-btn{ width:100%; margin-top:20px; padding:13px; border:none; border-radius:10px; background:var(--panel-3); border:1px solid var(--border-strong); color:var(--text); font-weight:600; font-size:13.5px; cursor:pointer; display:none; align-items:center; justify-content:center; gap:8px; }
+  .next-btn.show{ display:flex; }
+  .next-btn:hover{ background:var(--panel-2); }
+
+  .review-score{ text-align:center; padding:24px 0 8px; }
+  .review-score .big{ font-family:var(--mono); font-size:42px; font-weight:800; color:var(--accent); }
+  .review-score .sub{ font-size:12.5px; color:var(--text-faint); margin-top:4px; }
+  .review-actions{ display:flex; gap:10px; margin:20px 0 24px; }
+  .btn-ghost{ flex:1; background:var(--panel-3); border:1px solid var(--border); color:var(--text-dim); border-radius:9px; padding:11px; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .btn-ghost:hover{ border-color:var(--border-strong); color:var(--text); }
+  .btn-ghost svg{ width:14px; height:14px; }
+  .btn-ghost.primary{ background:linear-gradient(135deg, var(--accent), var(--accent-2)); color:#04060c; font-weight:700; border:none; }
+
+  .rcard{ border:1px solid var(--border); border-radius:11px; background:var(--panel-2); padding:16px 18px; margin-bottom:12px; }
+  .rcard-top{ display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .rcard .result-tag{ font-family:var(--mono); font-size:9.5px; font-weight:700; padding:2.5px 7px; border-radius:5px; }
+  .result-tag.correct{ color:var(--green); background:rgba(66,224,160,0.1); border:1px solid rgba(66,224,160,0.35); }
+  .result-tag.incorrect{ color:var(--red); background:rgba(255,107,111,0.1); border:1px solid rgba(255,107,111,0.35); }
+  .result-tag.skipped{ color:var(--text-faint); background:rgba(255,255,255,0.03); border:1px solid var(--border); }
+  .rqtext{ font-size:13.5px; font-weight:600; line-height:1.45; margin-bottom:10px; font-family:var(--mono); }
+  .ranswer{ font-size:12.5px; color:var(--green); font-family:var(--mono); margin-bottom:8px; }
+  .steps-toggle{ background:none; border:none; color:var(--text-faint); font-size:11px; cursor:pointer; display:flex; align-items:center; gap:5px; padding:0; }
+  .steps-toggle:hover{ color:var(--accent); }
+  .steps-toggle svg{ width:11px; height:11px; transition:transform .15s; }
+  .steps-toggle.open svg{ transform:rotate(90deg); }
+  .steps-list{ display:none; margin-top:10px; padding:12px 14px; background:var(--panel-3); border-radius:8px; border:1px solid var(--border); }
+  .steps-list.open{ display:block; }
+  .steps-list ol{ margin:0; padding-left:18px; }
+  .steps-list li{ font-size:12px; color:var(--text-dim); font-family:var(--mono); margin-bottom:6px; line-height:1.5; }
+  .steps-list li:last-child{ margin-bottom:0; color:var(--green); }
+
+  .error-box{ padding:14px 16px; border-radius:9px; background:rgba(255,107,111,0.08); border:1px solid rgba(255,107,111,0.3); font-size:12.5px; color:#ffb3b5; line-height:1.5; }
+  .offline-banner{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:9px; background:rgba(255,107,111,0.08); border:1px solid rgba(255,107,111,0.3); font-size:12px; color:#ffb3b5; margin-bottom:18px; }
+  .offline-banner code{ font-family:var(--mono); background:rgba(0,0,0,0.3); padding:1px 5px; border-radius:4px; }
+
+  .kb-overlay{ position:fixed; inset:0; background:rgba(2,3,7,0.7); backdrop-filter:blur(3px); display:none; align-items:flex-end; justify-content:center; z-index:100; }
+  .kb-overlay.open{ display:flex; }
+  .kb-panel{
+    width:100%; max-width:640px; background:var(--panel-2); border:1px solid var(--border-strong);
+    border-radius:16px 16px 0 0; padding:18px 18px 22px; box-shadow:0 -10px 40px rgba(0,0,0,0.5);
+    max-height:80vh; overflow-y:auto;
+  }
+  .kb-panel-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .kb-panel-head h3{ margin:0; font-size:13.5px; font-weight:700; }
+  .kb-close{ background:none; border:none; color:var(--text-faint); cursor:pointer; padding:4px; }
+  .kb-close svg{ width:18px; height:18px; }
+  .kb-group-label{ font-family:var(--mono); font-size:9.5px; color:var(--text-faint); letter-spacing:0.6px; margin:12px 0 7px; text-transform:uppercase; }
+  .kb-group-label:first-child{ margin-top:0; }
+  .kb-grid{ display:grid; grid-template-columns:repeat(7, 1fr); gap:7px; }
+  .kb-key{
+    background:var(--panel-3); border:1px solid var(--border); border-radius:8px;
+    color:var(--text); font-family:var(--mono); font-size:15px; padding:11px 4px;
+    cursor:pointer; text-align:center;
+  }
+  .kb-key:hover{ border-color:var(--accent); color:var(--accent); }
+  .kb-key.wide{ grid-column:span 2; font-size:12px; }
+  .kb-fab{
+    position:fixed; bottom:20px; right:20px; width:52px; height:52px; border-radius:50%;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2)); border:none;
+    box-shadow:0 4px 20px rgba(87,199,255,0.4); cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:50;
+  }
+  .kb-fab svg{ width:22px; height:22px; color:#04060c; }
+
+  @media (max-width: 760px){ .sidebar{ display:none; } .main{ padding:18px 16px 32px; } .kb-grid{ grid-template-columns:repeat(5,1fr); } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-text">
+        <div class="brand-name">MrSOLIS <span class="brand-badge">2-AL</span></div>
+        <div class="brand-tagline">Deterministic Math Engine</div>
+      </div>
+    </div>
+
+    <div class="function-card">
+      <b>What this does:</b> type one math or calculation question you already have - a word problem, a "differentiate this," an integral, a limit, an equation, even a proof. MrSOLIS 2-AL parses it, then generates as many fresh practice variations as you want by tweaking the numbers and recomputing symbolically. Every answer is solved, not guessed.
+    </div>
+
+    <nav class="nav">
+      <div class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+        Generate
+      </div>
+    </nav>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="engine-card">
+      <div class="engine-row">
+        <div class="engine-avatar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3v2m6-2v2M9 19v2m6-2v2M3 9h2m-2 6h2m14-6h2m-2 6h2M7 7h10v10H7z"/></svg>
+        </div>
+        <div class="engine-meta">
+          <div class="engine-name">Local Engine</div>
+          <div class="engine-status"><span class="status-dot off" id="statusDot"></span><span id="statusText">Checking…</span></div>
+        </div>
+      </div>
+      <div class="engine-note">sympy · symbolic solving<br>0 LLM calls, ever</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1>Practice Question Generator</h1>
+      <p>Bring a question from your slides or textbook. MrSOLIS 2-AL detects its structure and generates fresh variations with guaranteed-correct answers.</p>
+    </div>
+
+    <div class="toolbar">
+      <button class="cfg-toggle" id="cfgToggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        Options
+      </button>
+      <button class="cfg-toggle" id="kbOpenBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+        Keyboard
+      </button>
+    </div>
+    <div class="cfg-panel" id="cfgPanel">
+      <div class="cfg-row"><label for="engineUrl">Engine URL</label><input type="text" id="engineUrl" value="" placeholder="(auto - same origin)"></div>
+    </div>
+
+    <div id="offlineBanner" class="offline-banner" style="display:none">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <span>Engine offline. In a terminal, run <code>python -m qgen.server</code> from the project folder, then reload this page.</span>
+    </div>
+
+    <div class="hud">
+      <span class="corner c-tl"></span><span class="corner c-tr"></span>
+      <span class="corner c-bl"></span><span class="corner c-br"></span>
+
+      <div id="stateInput">
+        <textarea class="qinput" id="qInput" placeholder="e.g. A lamp consumes 200W of power, if the voltage is 100V, calculate the current being drawn by the lamp."></textarea>
+        <div class="examples">
+          <button class="example-chip" data-ex="A lamp consumes 200W of power, if the voltage is 100V, calculate the current being drawn by the lamp.">Word problem</button>
+          <button class="example-chip" data-ex="Differentiate f(x) = 3x^4 + 2x^3 - 5x">Differentiate</button>
+          <button class="example-chip" data-ex="Integrate x^3 - 2x + 4">Integrate</button>
+          <button class="example-chip" data-ex="Evaluate lim x->2 of x^2 - 4">Limit</button>
+          <button class="example-chip" data-ex="Solve 2x + 5 = 15">Equation</button>
+          <button class="example-chip" data-ex="Prove that root 2 is irrational">Proof</button>
+        </div>
+
+        <div class="slider-block">
+          <div class="slider-label">
+            <span>Number of questions</span>
+            <span class="slider-value"><span id="sliderVal">10</span><small>questions</small></span>
+          </div>
+          <input type="range" id="qSlider" min="1" max="30" step="1" value="10">
+          <div class="slider-ticks"><span>1</span><span>15</span><span>30</span></div>
+        </div>
+
+        <div class="timer-row">
+          <label for="timerInput">Time limit for the quiz (optional)</label>
+          <div class="timer-input-wrap">
+            <input type="number" id="timerInput" min="0" placeholder="0" value="">
+            <span>min</span>
+          </div>
+        </div>
+
+        <button class="generate-btn" id="generateBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+          Generate Questions
+        </button>
+        <div id="genError"></div>
+      </div>
+
+      <div id="stateLoading" style="display:none">
+        <div class="loading-wrap">
+          <div class="spinner"></div>
+          <div class="loading-stage" id="loadingStage">Parsing your question…</div>
+          <div class="loading-sub">No text leaves this machine.</div>
+        </div>
+      </div>
+
+      <div id="stateQuiz" style="display:none">
+        <div class="quiz-topbar">
+          <div class="quiz-progress">Question <b id="qIndex">1</b> / <span id="qTotal">10</span></div>
+          <div class="quiz-meta">
+            <span class="timer-pill" id="timerPill" style="display:none">--:--</span>
+            <span class="score-pill" id="scorePill">Score: 0/0</span>
+            <button class="exit-btn" id="exitBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              Exit
+            </button>
+          </div>
+        </div>
+        <div class="progress-bar"><div class="progress-bar-fill" id="progressFill" style="width:10%"></div></div>
+
+        <div class="qcard-top">
+          <span class="badge type" id="qTypeBadge">TYPE</span>
+          <span class="badge" id="qDiffBadge">DIFFICULTY</span>
+        </div>
+        <div class="qtext-big" id="qTextBig">—</div>
+        <div id="qAnswerArea"></div>
+        <button class="next-btn" id="nextBtn">Next Question →</button>
+      </div>
+
+      <div id="stateReview" style="display:none">
+        <div class="review-score">
+          <div class="big" id="reviewScoreBig">0/0</div>
+          <div class="sub" id="reviewScoreSub">correct</div>
+        </div>
+        <div class="review-actions">
+          <button class="btn-ghost" id="moreBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            More (no repeats)
+          </button>
+          <button class="btn-ghost primary" id="newQBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New question
+          </button>
+        </div>
+        <div id="reviewList"></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<div class="kb-overlay" id="kbOverlay">
+  <div class="kb-panel">
+    <div class="kb-panel-head">
+      <h3>Math Symbol Keyboard</h3>
+      <button class="kb-close" id="kbCloseBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+
+    <div class="kb-group-label">Operators &amp; grouping</div>
+    <div class="kb-grid">
+      <button class="kb-key" data-ins="+">+</button>
+      <button class="kb-key" data-ins="-">−</button>
+      <button class="kb-key" data-ins="*">×</button>
+      <button class="kb-key" data-ins="/">÷</button>
+      <button class="kb-key" data-ins="=">=</button>
+      <button class="kb-key" data-ins="(" data-cursor="1">(</button>
+      <button class="kb-key" data-ins=")">)</button>
+    </div>
+
+    <div class="kb-group-label">Powers &amp; roots</div>
+    <div class="kb-grid">
+      <button class="kb-key" data-ins="^">^</button>
+      <button class="kb-key" data-ins="^2">x²</button>
+      <button class="kb-key" data-ins="^3">x³</button>
+      <button class="kb-key" data-ins="sqrt()" data-cursor="5">√</button>
+      <button class="kb-key" data-ins="pi">π</button>
+      <button class="kb-key" data-ins="infinity">∞</button>
+      <button class="kb-key" data-ins="->">→</button>
+    </div>
+
+    <div class="kb-group-label">Functions</div>
+    <div class="kb-grid">
+      <button class="kb-key" data-ins="sin()" data-cursor="4">sin</button>
+      <button class="kb-key" data-ins="cos()" data-cursor="4">cos</button>
+      <button class="kb-key" data-ins="tan()" data-cursor="4">tan</button>
+      <button class="kb-key" data-ins="log()" data-cursor="4">log</button>
+      <button class="kb-key" data-ins="ln()" data-cursor="3">ln</button>
+      <button class="kb-key" data-ins="exp()" data-cursor="4">exp</button>
+      <button class="kb-key" data-ins="x">x</button>
+    </div>
+
+    <div class="kb-group-label">Calculus shortcuts</div>
+    <div class="kb-grid">
+      <button class="kb-key wide" data-ins="Differentiate f(x) = ">Differentiate</button>
+      <button class="kb-key wide" data-ins="Integrate ">Integrate</button>
+      <button class="kb-key wide" data-ins="Evaluate lim x-> of ">Evaluate lim</button>
+      <button class="kb-key wide" data-ins="Solve  = " data-cursor="6">Solve …=</button>
+      <button class="kb-key wide" data-ins="dx">dx</button>
+      <button class="kb-key wide" data-ins="d/dx">d/dx</button>
+      <button class="kb-key wide" data-ins="√">√ (bare)</button>
+    </div>
+  </div>
+</div>
+<button class="kb-fab" id="kbFab" title="Open math keyboard">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12"/></svg>
+</button>
+
+<script>
+(function(){
+  "use strict";
+  const els = id => document.getElementById(id);
+  const stateInput = els('stateInput'), stateLoading = els('stateLoading'),
+        stateQuiz = els('stateQuiz'), stateReview = els('stateReview');
+  const qInput = els('qInput'), qSlider = els('qSlider'), sliderVal = els('sliderVal');
+  const timerInput = els('timerInput');
+  const generateBtn = els('generateBtn'), genError = els('genError');
+  const loadingStage = els('loadingStage');
+  const cfgToggle = els('cfgToggle'), cfgPanel = els('cfgPanel');
+  const engineUrlInput = els('engineUrl');
+  const offlineBanner = els('offlineBanner');
+  const statusDot = els('statusDot'), statusText = els('statusText');
+
+  let deckId = null;
+  let lastQuestion = "";
+  let quizQuestions = [];
+  let quizIndex = 0;
+  let quizResults = [];
+  let score = { correct: 0, answered: 0 };
+  let timerSecondsLeft = null, timerHandle = null;
+
+  function engineBase(){
+    const override = engineUrlInput.value.trim();
+    if(override) return override.replace(/\/+$/,'');
+    // Served by the backend itself (hosted, or python -m qgen.server + this
+    // page opened at its "/") -> same origin, zero configuration needed.
+    if(window.location.protocol.startsWith('http')) return window.location.origin;
+    // Opened directly as a local file (file://) -> assume local dev server.
+    return 'http://127.0.0.1:8420';
+  }
+  function show(state){
+    stateInput.style.display = state==='input' ? '' : 'none';
+    stateLoading.style.display = state==='loading' ? '' : 'none';
+    stateQuiz.style.display = state==='quiz' ? '' : 'none';
+    stateReview.style.display = state==='review' ? '' : 'none';
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  cfgToggle.addEventListener('click', () => cfgPanel.classList.toggle('open'));
+  document.querySelectorAll('.example-chip').forEach(btn => {
+    btn.addEventListener('click', () => { qInput.value = btn.dataset.ex; qInput.focus(); });
+  });
+
+  const kbOverlay = els('kbOverlay');
+  function openKb(){ kbOverlay.classList.add('open'); }
+  function closeKb(){ kbOverlay.classList.remove('open'); }
+  els('kbOpenBtn').addEventListener('click', openKb);
+  els('kbFab').addEventListener('click', openKb);
+  els('kbCloseBtn').addEventListener('click', closeKb);
+  kbOverlay.addEventListener('click', (e) => { if(e.target === kbOverlay) closeKb(); });
+
+  function insertAtCursor(el, text, cursorOffset){
+    const start = el.selectionStart != null ? el.selectionStart : el.value.length;
+    const end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+    el.value = el.value.substring(0, start) + text + el.value.substring(end);
+    const pos = start + (cursorOffset !== undefined ? cursorOffset : text.length);
+    el.focus();
+    el.setSelectionRange(pos, pos);
+  }
+  document.querySelectorAll('.kb-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ins = btn.dataset.ins;
+      const cur = btn.dataset.cursor !== undefined ? parseInt(btn.dataset.cursor, 10) : undefined;
+      insertAtCursor(qInput, ins, cur);
+    });
+  });
+
+  async function checkHealth(){
+    try{
+      const r = await fetch(engineBase() + '/health', { signal: AbortSignal.timeout(3000) });
+      if(!r.ok) throw new Error('bad status');
+      statusDot.className = 'status-dot on'; statusText.textContent = 'Online';
+      offlineBanner.style.display = 'none';
+    }catch(e){
+      statusDot.className = 'status-dot off'; statusText.textContent = 'Offline';
+      offlineBanner.style.display = 'flex';
+    }
+  }
+  checkHealth();
+  setInterval(checkHealth, 8000);
+
+  function syncSlider(){
+    const min = +qSlider.min, max = +qSlider.max, val = +qSlider.value;
+    qSlider.style.setProperty('--fill', ((val-min)/(max-min)*100) + '%');
+    sliderVal.textContent = val;
+  }
+  qSlider.addEventListener('input', syncSlider);
+  syncSlider();
+
+  const STAGES = [
+    'Parsing your question…', 'Identifying givens and unknowns…', 'Matching to a known relationship…',
+    'Generating parameter variations…', 'Solving symbolically…', 'Building distractors…', 'Finalizing…'
+  ];
+  let stageTimer = null;
+  function startStageAnimation(){
+    let i = 0; loadingStage.textContent = STAGES[0];
+    stageTimer = setInterval(() => { i = (i+1) % STAGES.length; loadingStage.textContent = STAGES[i]; }, 850);
+  }
+  function stopStageAnimation(){ clearInterval(stageTimer); }
+
+  async function generate(isMore){
+    const question = isMore ? lastQuestion : qInput.value.trim();
+    if(!question){ qInput.focus(); return; }
+    lastQuestion = question;
+    genError.innerHTML = '';
+    show('loading');
+    startStageAnimation();
+
+    const body = { question: question, n: +qSlider.value, reset: false };
+    if(deckId) body.deck_id = deckId;
+
+    try{
+      const r = await fetch(engineBase() + '/generate', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      stopStageAnimation();
+      if(!r.ok){ throw new Error(data.detail || ('Server error ' + r.status)); }
+      deckId = data.deck_id;
+      if(!data.detected_type){
+        show('input');
+        genError.innerHTML = '<div class="error-box">' + escapeHtml(data.error || "Couldn't identify this as a calculable question.") + '</div>';
+        return;
+      }
+      startQuiz(data.questions);
+    }catch(e){
+      stopStageAnimation();
+      show('input');
+      genError.innerHTML = '<div class="error-box">Generation failed: ' + escapeHtml(String(e.message || e)) +
+        '<br>Make sure the local engine is running (<code style="font-family:var(--mono)">python -m qgen.server</code>).</div>';
+    }
+  }
+  generateBtn.addEventListener('click', () => generate(false));
+  els('moreBtn').addEventListener('click', () => { show('input'); genError.innerHTML=''; generate(true); });
+  els('newQBtn').addEventListener('click', () => { deckId = null; qInput.value=''; show('input'); qInput.focus(); });
+
+  function startQuiz(questions){
+    quizQuestions = questions;
+    quizIndex = 0;
+    quizResults = [];
+    score = { correct: 0, answered: 0 };
+    els('qTotal').textContent = questions.length;
+    startTimerIfSet();
+    show('quiz');
+    renderQuizQuestion();
+  }
+
+  function startTimerIfSet(){
+    clearInterval(timerHandle);
+    const mins = parseFloat(timerInput.value);
+    const timerPill = els('timerPill');
+    if(!mins || mins <= 0){ timerPill.style.display = 'none'; timerSecondsLeft = null; return; }
+    timerSecondsLeft = Math.round(mins * 60);
+    timerPill.style.display = 'inline-block';
+    updateTimerDisplay();
+    timerHandle = setInterval(() => {
+      timerSecondsLeft--;
+      updateTimerDisplay();
+      if(timerSecondsLeft <= 0){
+        clearInterval(timerHandle);
+        finishQuiz();
+      }
+    }, 1000);
+  }
+  function updateTimerDisplay(){
+    const timerPill = els('timerPill');
+    const m = Math.floor(timerSecondsLeft / 60), s = timerSecondsLeft % 60;
+    timerPill.textContent = m + ':' + String(s).padStart(2, '0');
+    timerPill.classList.toggle('low', timerSecondsLeft <= 30);
+  }
+
+  const TYPE_LABEL = {
+    word_problem: 'WORD PROBLEM', differentiation: 'DIFFERENTIATION',
+    integration: 'INTEGRATION', limit: 'LIMIT', algebra: 'EQUATION', proof: 'PROOF',
+  };
+  const LETTERS = ['A','B','C','D','E'];
+
+  function updateScorePill(){
+    els('scorePill').textContent = 'Score: ' + score.correct + '/' + score.answered;
+  }
+
+  function renderQuizQuestion(){
+    const q = quizQuestions[quizIndex];
+    els('qIndex').textContent = quizIndex + 1;
+    els('progressFill').style.width = (((quizIndex) / quizQuestions.length) * 100) + '%';
+    els('qTypeBadge').textContent = TYPE_LABEL[q.fact_type] || q.fact_type.toUpperCase();
+    const diffBadge = els('qDiffBadge');
+    diffBadge.textContent = (q.difficulty || '').toUpperCase();
+    diffBadge.className = 'badge diff-' + (q.difficulty || 'medium');
+    els('qTextBig').textContent = q.question;
+    updateScorePill();
+
+    const area = els('qAnswerArea');
+    area.innerHTML = '';
+    const nextBtn = els('nextBtn');
+    nextBtn.classList.remove('show');
+
+    if(q.question_type === 'mcq' && q.options){
+      const optWrap = document.createElement('div');
+      optWrap.className = 'options';
+      q.options.forEach((opt, i) => {
+        const b = document.createElement('button');
+        b.className = 'opt';
+        b.innerHTML = '<span class="opt-letter">' + LETTERS[i] + '</span><span>' + escapeHtml(opt) + '</span>';
+        b.addEventListener('click', () => {
+          const isCorrect = opt.trim() === q.answer.trim();
+          optWrap.querySelectorAll('.opt').forEach(o => o.classList.add('disabled'));
+          b.classList.add(isCorrect ? 'correct' : 'incorrect');
+          if(!isCorrect){
+            optWrap.querySelectorAll('.opt').forEach(o => { if(o.textContent.trim() === q.answer.trim()) o.classList.add('correct'); });
+          }
+          recordAnswer(q, isCorrect);
+        });
+        optWrap.appendChild(b);
+      });
+      area.appendChild(optWrap);
+    } else {
+      const block = document.createElement('div');
+      const revealBtn = document.createElement('button');
+      revealBtn.className = 'sa-reveal';
+      revealBtn.textContent = 'Reveal answer';
+      block.appendChild(revealBtn);
+      area.appendChild(block);
+
+      revealBtn.addEventListener('click', () => {
+        block.innerHTML =
+          '<div class="sa-answer-block"><div class="ans">' + escapeHtml(q.answer) + '</div>' +
+          '<div class="self-report">' +
+          '<button class="pick-correct">I got it right</button>' +
+          '<button class="pick-wrong">I got it wrong</button>' +
+          '</div></div>';
+        block.querySelector('.pick-correct').addEventListener('click', () => {
+          block.querySelectorAll('.self-report button').forEach(b => b.disabled = true);
+          recordAnswer(q, true);
+        });
+        block.querySelector('.pick-wrong').addEventListener('click', () => {
+          block.querySelectorAll('.self-report button').forEach(b => b.disabled = true);
+          recordAnswer(q, false);
+        });
+      });
+    }
+  }
+
+  function recordAnswer(q, isCorrect){
+    score.answered++;
+    if(isCorrect) score.correct++;
+    updateScorePill();
+    quizResults.push(Object.assign({}, q, { userCorrect: isCorrect }));
+    const nextBtn = els('nextBtn');
+    nextBtn.classList.add('show');
+    nextBtn.textContent = (quizIndex + 1 < quizQuestions.length) ? 'Next Question →' : 'Finish Quiz';
+  }
+
+  els('nextBtn').addEventListener('click', () => {
+    quizIndex++;
+    if(quizIndex >= quizQuestions.length){ finishQuiz(); return; }
+    renderQuizQuestion();
+  });
+
+  els('exitBtn').addEventListener('click', () => {
+    if(confirm('Exit this quiz? Your progress on the current attempt will be lost.')){
+      clearInterval(timerHandle);
+      show('input');
+    }
+  });
+
+  function finishQuiz(){
+    clearInterval(timerHandle);
+    const answeredIds = new Set(quizResults.map(r => r.id));
+    quizQuestions.forEach(q => {
+      if(!answeredIds.has(q.id)){
+        quizResults.push(Object.assign({}, q, { userCorrect: null }));
+      }
+    });
+    renderReview();
+  }
+
+  function renderReview(){
+    els('reviewScoreBig').textContent = score.correct + '/' + score.answered;
+    const pct = score.answered ? Math.round(100 * score.correct / score.answered) : 0;
+    const skipped = quizResults.filter(r => r.userCorrect === null).length;
+    els('reviewScoreSub').textContent = pct + '% correct' + (skipped ? ' · ' + skipped + ' skipped' : '');
+
+    const list = els('reviewList');
+    list.innerHTML = '';
+    quizResults.forEach((q) => {
+      const card = document.createElement('div');
+      card.className = 'rcard';
+      let tag = '<span class="result-tag skipped">SKIPPED</span>';
+      if(q.userCorrect === true) tag = '<span class="result-tag correct">CORRECT</span>';
+      if(q.userCorrect === false) tag = '<span class="result-tag incorrect">INCORRECT</span>';
+      card.innerHTML =
+        '<div class="rcard-top">' + tag +
+          '<span class="badge type">' + (TYPE_LABEL[q.fact_type] || q.fact_type.toUpperCase()) + '</span></div>' +
+        '<div class="rqtext">' + escapeHtml(q.question) + '</div>' +
+        '<div class="ranswer">Answer: ' + escapeHtml(q.answer) + '</div>';
+
+      if(q.steps && q.steps.length){
+        const toggle = document.createElement('button');
+        toggle.className = 'steps-toggle';
+        toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg> Show solution steps';
+        const stepsDiv = document.createElement('div');
+        stepsDiv.className = 'steps-list';
+        const ol = document.createElement('ol');
+        q.steps.forEach(s => { const li = document.createElement('li'); li.textContent = s; ol.appendChild(li); });
+        stepsDiv.appendChild(ol);
+        toggle.addEventListener('click', () => {
+          const open = stepsDiv.classList.toggle('open');
+          toggle.classList.toggle('open', open);
+          toggle.lastChild.textContent = open ? ' Hide solution steps' : ' Show solution steps';
+        });
+        card.appendChild(toggle);
+        card.appendChild(stepsDiv);
+      }
+      list.appendChild(card);
+    });
+    show('review');
+  }
+
+})();
+</script>
+</body>
+</html>

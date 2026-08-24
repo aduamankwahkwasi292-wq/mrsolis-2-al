@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+qgen/qgen_store.sqlite3
+venv/
+.venv/
+.env
