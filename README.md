@@ -65,50 +65,48 @@ scanning gets wired back in later — not required for the current flow.
 
 ## Hosting it as a web app
 
-The server now serves the frontend itself (at `/`), so there's one app to
-deploy — no separate static-site hosting needed.
+**Live now on GitHub Pages:**
+https://aduamankwahkwasi292-wq.github.io/mrsolis-2-al/
 
-### Deploy to Render (free, no credit card, recommended)
+The whole engine runs **in the visitor's browser** via Pyodide (CPython +
+sympy compiled to WebAssembly) — the page boots the engine client-side and
+computes everything locally. No server, no cold starts, no sleep, free
+hosting forever. The first visit downloads ~20 MB of engine and takes
+~10-20s to boot; after that it's cached and instant.
 
-1. Push this project to a GitHub repo (`.gitignore` already excludes
-   `__pycache__` and the local SQLite file).
-2. At render.com, **New -> Web Service** -> connect that repo. Render
-   reads `render.yaml` automatically and fills in the build/start commands
-   (`pip install -r requirements.txt` / `python -m qgen.server`) — just
-   click **Create Web Service**.
-3. Render gives you a public URL like `https://mrsolis-2-al.onrender.com`.
-   Open it directly — that *is* the app, frontend and backend both.
+### Updating the live site (one command)
 
-**How updates work**: once connected, every `git push` to your main branch
-triggers an automatic redeploy. No manual re-upload, ever:
 ```powershell
-git add .
-git commit -m "describe your change"
-git push
+# 1. make your changes, then:
+git add -A; git commit -m "describe your change"
+# 2. ship it:
+.\deploy.ps1
 ```
-Render rebuilds and swaps in the new version within a minute or two.
 
-**Free tier trade-offs** (fine for a personal/portfolio project, worth
-knowing about): the free web service spins down after 15 minutes of
-inactivity, so the first request after a quiet period takes ~30-50s to
-wake up. Disk is not persistent across redeploys, so the SQLite no-repeat
-history (`qgen_store.sqlite3`) resets each time you push an update — the
-app still works fine, it just means the "never repeats a question"
-guarantee resets on redeploy, not on every request. If either matters to
-you, Render's Starter plan ($7/mo) removes both (no sleep, persistent
-disk) with the exact same repo — no code changes needed.
+`deploy.ps1` mirrors `main` onto the `gh-pages` branch (the Pages source),
+skipping junk like `__pycache__` and the local SQLite file. The site
+updates about a minute later.
 
-### Alternative: Railway or Fly.io
+If GitHub Actions is available on the account, pushing to `main` also
+triggers `.github/workflows/deploy.yml`, which publishes the identical
+bundle automatically — the manual script is the fallback/override either
+way.
 
-Both work the same way via the included `Dockerfile`:
-- **Railway**: New Project -> Deploy from GitHub repo -> it detects the
-  Dockerfile automatically. Push-to-deploy works the same as Render.
-- **Fly.io**: `fly launch` in the project folder (detects the Dockerfile),
-  then `fly deploy` for updates. Requires a credit card even for its
-  trial tier, as of this writing.
+### Local development
 
-### Running the Docker image yourself (any VPS)
-```bash
-docker build -t mrsolis-2-al .
-docker run -p 8420:8420 mrsolis-2-al
+```powershell
+python -m qgen.server   # serves mrsolis-2-al.html at http://127.0.0.1:8420
 ```
+The page auto-detects this backend via `/health` and uses it instead of
+the in-browser engine (same JSON contract both ways). You can also point
+any hosted copy at a local engine with the "Engine URL" box in settings.
+
+### Alternative: server-based hosting (Render/Railway/Fly/Docker)
+
+The FastAPI server still works exactly as before — `render.yaml`,
+`Dockerfile` and `requirements.txt` are all intact:
+
+- **Render**: New -> Web Service -> connect repo; `render.yaml` fills in
+  build/start commands. Free tier sleeps after ~15 min idle.
+- **Railway/Fly.io**: deploy from the included `Dockerfile`.
+- **Any VPS**: `docker build -t mrsolis-2-al . && docker run -p 8420:8420 mrsolis-2-al`

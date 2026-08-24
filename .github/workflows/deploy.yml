@@ -1,38 +1,45 @@
 name: Deploy to GitHub Pages
 
+# Pushes the static bundle (index.html + qgen/*.py) to the gh-pages branch.
+# GitHub's legacy Pages builder picks it up automatically - no Actions
+# artifact deployment, no pages environment needed. This is the exact same
+# bundle deploy.ps1 produces locally; either path works.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-deploy
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare site
+      - name: Build site bundle
         run: |
-          cp mrsolis-2-al.html index.html
-          touch .nojekyll
+          mkdir site
+          cp mrsolis-2-al.html site/index.html
+          cp mrsolis-2-al.html site/mrsolis-2-al.html
+          cp -r qgen site/qgen
+          rm -rf site/qgen/__pycache__ site/qgen/*.sqlite3
+          touch site/.nojekyll
 
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish to gh-pages
+        run: |
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Deploy ${GITHUB_SHA::7}"
+          git push -q --force \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            gh-pages:gh-pages
