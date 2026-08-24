@@ -545,19 +545,91 @@
     });
   });
 
+  // ---- built-in browser engine (GitHub Pages / any static hosting) --------
+  // If no backend answers /health, boot CPython-in-the-browser via Pyodide,
+  // upload the qgen package into its virtual FS, and call the pipeline
+  // directly - same JSON contract as POST /generate, zero servers.
+  const PYODIDE_BASE = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
+  const QGEN_FILES = [
+    '__init__.py','algebra.py','calculus.py','dedup.py','distractors_math.py',
+    'formulas.py','grammar.py','ingest.py','nlp.py','paramgen.py','pipeline.py',
+    'proofs.py','render.py','steps.py','store.py','units.py','wordproblems.py'
+  ];
+  const PY_BOOTSTRAP = `
+import sys, json, hashlib
+sys.path.insert(0, "/app")
+from qgen.pipeline import generate_from_question
+
+def qgen_generate(payload_json):
+    req = json.loads(payload_json)
+    question = (req.get("question") or "").strip()
+    deck_id = req.get("deck_id") or hashlib.sha1(question.encode()).hexdigest()[:16]
+    return json.dumps(generate_from_question(
+        deck_id=deck_id, question_text=question,
+        n=int(req.get("n", 10)), reset=bool(req.get("reset", False))))
+`;
+  let staticMode = false;
+  let staticEnginePromise = null;
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve;
+      s.onerror = () => reject(new Error('Could not download ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function ensureStaticEngine(){
+    if(!staticEnginePromise){
+      staticEnginePromise = (async () => {
+        statusText.textContent = 'Booting in-browser engine…';
+        await loadScript(PYODIDE_BASE + 'pyodide.js');
+        const pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
+        statusText.textContent = 'Loading math engine…';
+        await pyodide.loadPackage('sympy');
+        pyodide.FS.mkdirTree('/app/qgen');
+        for(const f of QGEN_FILES){
+          const r = await fetch('qgen/' + f);
+          if(!r.ok) throw new Error('Missing engine file qgen/' + f);
+          pyodide.FS.writeFile('/app/qgen/' + f, await r.text());
+        }
+        pyodide.runPython(PY_BOOTSTRAP);
+        window.__qgenGenerate = pyodide.globals.get('qgen_generate');
+        staticMode = true;
+        statusDot.className = 'status-dot on'; statusText.textContent = 'In-browser engine';
+        offlineBanner.style.display = 'none';
+        return true;
+      })();
+      staticEnginePromise.catch(() => {
+        staticEnginePromise = null;
+        statusDot.className = 'status-dot off'; statusText.textContent = 'Engine failed to load';
+      });
+    }
+    return staticEnginePromise;
+  }
+
+  let healthTimer = null;
   async function checkHealth(){
     try{
       const r = await fetch(engineBase() + '/health', { signal: AbortSignal.timeout(3000) });
       if(!r.ok) throw new Error('bad status');
       statusDot.className = 'status-dot on'; statusText.textContent = 'Online';
       offlineBanner.style.display = 'none';
-    }catch(e){
+      return;
+    }catch(e){ /* no backend reachable here */ }
+    // An explicitly entered remote engine that's down -> keep the offline UI.
+    if(engineUrlInput.value.trim()){
       statusDot.className = 'status-dot off'; statusText.textContent = 'Offline';
       offlineBanner.style.display = 'flex';
+      return;
     }
+    // No backend expected -> switch to the bundled in-browser engine.
+    clearInterval(healthTimer); healthTimer = null;
+    await ensureStaticEngine();
   }
   checkHealth();
-  setInterval(checkHealth, 8000);
+  healthTimer = setInterval(checkHealth, 8000);
 
   function syncSlider(){
     const min = +qSlider.min, max = +qSlider.max, val = +qSlider.value;
@@ -590,12 +662,19 @@
     if(deckId) body.deck_id = deckId;
 
     try{
-      const r = await fetch(engineBase() + '/generate', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
-      });
-      const data = await r.json();
-      stopStageAnimation();
-      if(!r.ok){ throw new Error(data.detail || ('Server error ' + r.status)); }
+      let data;
+      if(staticMode){
+        await ensureStaticEngine();
+        data = JSON.parse(window.__qgenGenerate(JSON.stringify(body)));
+        stopStageAnimation();
+      }else{
+        const r = await fetch(engineBase() + '/generate', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+        data = await r.json();
+        stopStageAnimation();
+        if(!r.ok){ throw new Error(data.detail || ('Server error ' + r.status)); }
+      }
       deckId = data.deck_id;
       if(!data.detected_type){
         show('input');
@@ -606,8 +685,11 @@
     }catch(e){
       stopStageAnimation();
       show('input');
+      const hint = staticMode
+        ? 'Try reloading the page to re-initialise the in-browser engine.'
+        : 'Make sure the local engine is running (<code style="font-family:var(--mono)">python -m qgen.server</code>).';
       genError.innerHTML = '<div class="error-box">Generation failed: ' + escapeHtml(String(e.message || e)) +
-        '<br>Make sure the local engine is running (<code style="font-family:var(--mono)">python -m qgen.server</code>).</div>';
+        '<br>' + hint + '</div>';
     }
   }
   generateBtn.addEventListener('click', () => generate(false));

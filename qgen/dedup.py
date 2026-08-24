@@ -10,9 +10,6 @@ import hashlib
 import re
 from typing import List, Optional
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
 from . import store
 
 
@@ -38,6 +35,13 @@ class DedupFilter:
 
     def _rebuild(self):
         if self.threshold is not None and len(self.seen_texts) >= 2:
+            # Imported lazily: the near-dup layer is off in production
+            # (pipeline passes threshold=None), and a hard top-level import
+            # would drag scikit-learn/scipy into every environment, including
+            # browser (Pyodide) builds that don't ship sklearn at all.
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
+
             self._vec = TfidfVectorizer(stop_words="english")
             self._matrix = self._vec.fit_transform(self.seen_texts)
         else:
