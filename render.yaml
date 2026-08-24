@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: mrsolis-2-al
-    env: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m qgen.server
-    healthCheckPath: /health
